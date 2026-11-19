@@ -1,13 +1,11 @@
-import { Router } from 'express';
-import { userController } from '../controllers/user.controller';
+import { UserController, userController } from '../controllers/user.controller';
+import { createControllerRouter } from '../decorators';
+import { loginRateLimiter } from '../middlewares/rateLimiter';
 
-const router = Router();
+// Automatically builds routes from @Get, @Post, @Put, @Delete decorators on UserController
+const router = createControllerRouter(UserController);
 
-// Define CRUD routes for User
-router.get('/', userController.getAll);
-router.get('/:id', userController.getById);
-router.post('/', userController.create);
-router.put('/:id', userController.update);
-router.delete('/:id', userController.delete);
+// Alias route for auth
+router.post('/auth', loginRateLimiter, userController.login);
 
 export default router;

@@ -1,10 +1,18 @@
 import { Request, Response, NextFunction } from 'express';
-import { UserService, userService } from '../services/user.service';
+import { Controller, Get, Post, Put, Delete, Inject } from '../decorators';
+import { UserService } from '../services/user.service';
+import { Container } from 'typedi';
+import { loginRateLimiter } from '../middlewares/rateLimiter';
+import { verifyToken } from '../middlewares';
+import { AppError } from '../utils/appError';
 
+@Controller('/users')
 export class UserController {
-  constructor(private userSvc: UserService = userService) {}
+  @Inject(() => UserService)
+  private userSvc!: UserService;
 
-  getAll = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  @Get('/', verifyToken)
+  async getAll(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const users = await this.userSvc.getAllUsers();
       res.status(200).json({
@@ -14,9 +22,10 @@ export class UserController {
     } catch (error) {
       next(error);
     }
-  };
+  }
 
-  getById = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  @Get('/:id')
+  async getById(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { id } = req.params;
       const user = await this.userSvc.getUserById(id as string);
@@ -27,9 +36,10 @@ export class UserController {
     } catch (error) {
       next(error);
     }
-  };
+  }
 
-  create = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  @Post('/')
+  async create(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const user = await this.userSvc.createUser(req.body);
       res.status(201).json({
@@ -40,23 +50,35 @@ export class UserController {
     } catch (error) {
       next(error);
     }
-  };
+  }
 
-  update = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  @Put('/', verifyToken)
+  @Put('/:id', verifyToken)
+  async update(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { id } = req.params;
-      const updatedUser = await this.userSvc.updateUser(id as string, req.body);
+      const id = (req.params.id || req.body.id || req.body.userid || req.user?.userid) as string;
+      if (!id) {
+        throw new AppError('User identifier is required', 400);
+      }
+
+      const { password } = req.body;
+      if (!password || typeof password !== 'string' || !password.trim()) {
+        throw new AppError('Password is required', 400);
+      }
+
+      const updatedUser = await this.userSvc.updateUser(id, { password: password.trim() });
       res.status(200).json({
         success: true,
-        message: 'User updated successfully',
+        message: 'Password updated successfully',
         data: updatedUser,
       });
     } catch (error) {
       next(error);
     }
-  };
+  }
 
-  delete = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  @Delete('/:id')
+  async delete(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { id } = req.params;
       await this.userSvc.deleteUser(id as string);
@@ -67,8 +89,38 @@ export class UserController {
     } catch (error) {
       next(error);
     }
-  };
+  }
+
+  @Post('/login', loginRateLimiter)
+  async login(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { userid, password } = req.body;
+      const result = await this.userSvc.authenticateUser({ userid: userid.toLowerCase(), password });
+      res.status(200).json({
+        success: true,
+        data: result,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  @Post('/retoken')
+  async retoken(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { userid, access_token, refresh_token } = req.body;
+      const result = await this.userSvc.retoken({ userid, access_token, refresh_token });
+      res.status(200).json({
+        success: true,
+        message: 'Token reissued successfully',
+        userid: result.userid,
+        access_token: result.access_token
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
 }
 
-// Export singleton instance
-export const userController = new UserController();
+// Export singleton instance from TypeDI Container
+export const userController = Container.get(UserController);

@@ -1,3 +1,4 @@
+import 'reflect-metadata';
 import express, { Request, Response } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
@@ -21,6 +22,8 @@ app.get('/', (req: Request, res: Response) => {
     endpoints: {
       health: '/api/health',
       users: '/api/users',
+      brands: '/api/brands',
+      perfumes: '/api/perfumes',
     },
   });
 });
